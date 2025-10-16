@@ -190,29 +190,49 @@ def cmd_clean() -> None:
 
 def cmd_check_files() -> None:
     """
-    Check if both stocks and options flatfiles are available for yesterday.
+    Check if new flatfiles are available in Polygon S3 that aren't in our Delta tables yet.
 
-    Polygon drops files between 8PM NYC time on the day of data and 11AM NYC time
-    the next day. This command checks if both files have arrived yet.
+    This intelligently compares what's in our Delta tables vs what's available in Polygon's
+    S3 bucket. It handles varying file drop times gracefully - files can appear as early as
+    8PM ET on the day of the data, or as late as 11AM ET the next day.
 
     Exit codes:
-        0: Both files are available (ready to update)
-        2: Files not yet available (waiting for Polygon)
+        0: Both stocks AND options files are available for a new date (ready to update)
+        2: No new files available yet (waiting for Polygon)
         1: Error occurred during check
     """
     try:
+        from optionality.loaders.s3_filesystem import (
+            list_available_dates,
+        )
         import fsspec
         settings = get_settings()
 
-        # Get yesterday's date in NYC timezone
         nyc_tz = ZoneInfo("America/New_York")
         now_nyc = datetime.now(nyc_tz)
-        yesterday = (now_nyc - timedelta(days=1)).date()
-
-        logger.info(f"🔍 Checking if flatfiles are available for {yesterday}")
+        logger.info(f"🔍 Checking for new flatfiles...")
         logger.info(f"⏰ Current time in NYC: {now_nyc.strftime('%Y-%m-%d %H:%M:%S %Z')}")
 
-        # Get filesystem (using fsspec directly to avoid caching issues)
+        # Step 1: Get latest dates from our Delta tables 📊
+        stats = delta.get_table_stats()
+        stocks_max_date = None
+        options_max_date = None
+
+        if "stocks_raw" in stats and "max_date" in stats["stocks_raw"]:
+            # window_start is a datetime, extract the date
+            max_datetime = stats["stocks_raw"]["max_date"]
+            if max_datetime:
+                stocks_max_date = max_datetime.date() if isinstance(max_datetime, datetime) else max_datetime
+                logger.info(f"📈 Latest stocks data in Delta: {stocks_max_date}")
+
+        if "options" in stats and "max_date" in stats["options"]:
+            # window_start is a datetime, extract the date
+            max_datetime = stats["options"]["max_date"]
+            if max_datetime:
+                options_max_date = max_datetime.date() if isinstance(max_datetime, datetime) else max_datetime
+                logger.info(f"📉 Latest options data in Delta: {options_max_date}")
+
+        # Step 2: Get filesystem for Polygon S3 🌐
         fs = fsspec.filesystem(
             "s3",
             key=settings.polygon_flatfiles_access_key,
@@ -220,44 +240,79 @@ def cmd_check_files() -> None:
             client_kwargs={"endpoint_url": settings.polygon_flatfiles_endpoint},
         )
 
-        # Check stocks file
-        stocks_path = build_s3_path(
-            settings.stocks_s3_bucket,
-            settings.stocks_s3_prefix,
-            yesterday
-        )
-        stocks_available = check_file_accessible(fs, stocks_path)
+        # Step 3: Get available dates from Polygon S3 (check current year and last year) 📅
+        current_year = now_nyc.year
+        stocks_dates_set = set()
+        options_dates_set = set()
 
-        # Check options file
-        options_path = build_s3_path(
-            settings.options_s3_bucket,
-            settings.options_s3_prefix,
-            yesterday
-        )
-        options_available = check_file_accessible(fs, options_path)
+        for year in [current_year - 1, current_year]:
+            stocks_dates = list_available_dates(
+                fs, settings.stocks_s3_bucket, settings.stocks_s3_prefix, year
+            )
+            options_dates = list_available_dates(
+                fs, settings.options_s3_bucket, settings.options_s3_prefix, year
+            )
+            stocks_dates_set.update(stocks_dates)
+            options_dates_set.update(options_dates)
 
-        # Report results
-        if stocks_available:
-            logger.info(f"✅ Stocks file available: {stocks_path}")
-        else:
-            logger.info(f"⏳ Stocks file not yet available: {stocks_path}")
-
-        if options_available:
-            logger.info(f"✅ Options file available: {options_path}")
-        else:
-            logger.info(f"⏳ Options file not yet available: {options_path}")
-
-        # Exit with appropriate code
-        if stocks_available and options_available:
-            logger.success(f"🎉 Both files are available for {yesterday}! Ready to update.")
-            sys.exit(0)
-        else:
-            logger.info(f"⏳ Waiting for Polygon to drop files for {yesterday}...")
+        if not stocks_dates_set and not options_dates_set:
+            logger.warning("⚠️ No files found in Polygon S3")
             logger.info("💡 Files typically arrive between 8PM ET (day of) and 11AM ET (next day)")
-            sys.exit(2)  # Special exit code: not ready yet (not an error)
+            sys.exit(2)
+
+        # Step 4: Find NEW dates (in S3 but not in Delta) 🆕
+        new_stocks_dates = {d for d in stocks_dates_set if stocks_max_date is None or d > stocks_max_date}
+        new_options_dates = {d for d in options_dates_set if options_max_date is None or d > options_max_date}
+
+        # Step 5: Find dates where BOTH stocks AND options are available 🎯
+        dates_with_both = new_stocks_dates & new_options_dates
+
+        if dates_with_both:
+            # Get the earliest new date with both files
+            earliest_new_date = min(dates_with_both)
+
+            stocks_path = build_s3_path(
+                settings.stocks_s3_bucket,
+                settings.stocks_s3_prefix,
+                earliest_new_date
+            )
+            options_path = build_s3_path(
+                settings.options_s3_bucket,
+                settings.options_s3_prefix,
+                earliest_new_date
+            )
+
+            logger.success(f"🎉 New data available for {earliest_new_date}!")
+            logger.info(f"  ✅ Stocks: {stocks_path}")
+            logger.info(f"  ✅ Options: {options_path}")
+
+            if len(dates_with_both) > 1:
+                sorted_dates = [str(d) for d in sorted(dates_with_both)]
+                logger.info(f"  📅 {len(dates_with_both)} total dates available: {', '.join(sorted_dates[:5])}...")
+
+            sys.exit(0)
+
+        # Step 6: Report what we're waiting for ⏳
+        logger.info("⏳ No new data available yet (waiting for both stocks AND options)")
+
+        if new_stocks_dates and not new_options_dates:
+            sorted_dates = [str(d) for d in sorted(new_stocks_dates)]
+            logger.info(f"  📈 Stocks available for: {', '.join(sorted_dates[:5])}")
+            logger.info(f"  ⏳ Waiting for options data...")
+        elif new_options_dates and not new_stocks_dates:
+            sorted_dates = [str(d) for d in sorted(new_options_dates)]
+            logger.info(f"  📉 Options available for: {', '.join(sorted_dates[:5])}")
+            logger.info(f"  ⏳ Waiting for stocks data...")
+        else:
+            logger.info(f"  ⏳ Waiting for new files from Polygon...")
+
+        logger.info("💡 Files typically arrive between 8PM ET (day of) and 11AM ET (next day)")
+        sys.exit(2)  # Special exit code: not ready yet (not an error)
 
     except Exception as e:
         logger.error(f"❌ Error checking file availability: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
 
