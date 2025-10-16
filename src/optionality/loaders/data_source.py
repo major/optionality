@@ -263,6 +263,8 @@ class S3DataSource(DataSource):
         """
         Discover all available dates from S3 using fsspec.
 
+        Uses boundary detection to only access years where data is accessible.
+
         Args:
             start_date: Optional start date filter
             end_date: Optional end date filter
@@ -275,20 +277,40 @@ class S3DataSource(DataSource):
             >>> ds = S3DataSource(settings, fs, "stocks")
             >>> dates = ds.discover_available_dates()
         """
-        # Get all available years
-        years = list_available_years(self.fs, self.bucket, self.prefix)
+        # Get accessible date range using boundary detection
+        earliest_accessible, latest_accessible = get_available_date_range(
+            self.settings, self.fs, self.data_type
+        )
+
+        if not earliest_accessible or not latest_accessible:
+            logger.warning(f"⚠️ No accessible data found for {self.data_type}")
+            return []
+
+        # Apply user-provided filters (but constrain to accessible range)
+        effective_start = start_date or earliest_accessible
+        effective_end = end_date or latest_accessible
+
+        # Ensure we don't go outside accessible boundaries
+        if effective_start < earliest_accessible:
+            logger.info(f"📅 Constraining start date from {effective_start} to {earliest_accessible} (earliest accessible)")
+            effective_start = earliest_accessible
+
+        if effective_end > latest_accessible:
+            logger.info(f"📅 Constraining end date from {effective_end} to {latest_accessible} (latest accessible)")
+            effective_end = latest_accessible
+
+        # Get years from the bounded range
+        years = list(range(effective_start.year, effective_end.year + 1))
+
+        logger.info(f"📊 Discovering dates for {self.data_type}: {effective_start.year} to {effective_end.year}")
 
         all_dates = []
         for year in years:
-            # Apply year filter
-            if not self._is_year_in_range(year, start_date, end_date):
-                continue
-
             # Get all dates for this year
             year_dates = list_available_dates(self.fs, self.bucket, self.prefix, year)
 
             # Apply date filters
-            filtered_dates = self._filter_dates_in_range(year_dates, start_date, end_date)
+            filtered_dates = self._filter_dates_in_range(year_dates, effective_start, effective_end)
             all_dates.extend(filtered_dates)
 
         return sorted(all_dates)

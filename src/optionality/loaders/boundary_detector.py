@@ -2,18 +2,17 @@
 
 from datetime import date, timedelta
 from typing import Optional, Tuple
-from functools import lru_cache
 
 from fsspec import AbstractFileSystem
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from optionality.config import Settings
-from optionality.logger import logger
 from optionality.loaders.s3_filesystem import (
     build_s3_path,
     check_file_accessible,
     list_available_years,
 )
+from optionality.logger import logger
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
@@ -21,9 +20,10 @@ def find_earliest_accessible_year(
     fs: AbstractFileSystem, bucket: str, prefix: str
 ) -> Optional[int]:
     """
-    Find the earliest accessible year by working backwards from current year.
+    Find the earliest accessible year by checking if files are actually accessible.
 
-    Uses binary search approach to efficiently find the boundary.
+    Directory listing shows ALL years in the bucket, but we may not have access to older years.
+    This function verifies accessibility by attempting to access actual files.
 
     Args:
         fs: fsspec S3 filesystem
@@ -40,14 +40,41 @@ def find_earliest_accessible_year(
     """
     current_year = date.today().year
 
-    # First, try to list years directly (fastest approach)
+    # Get all years from directory listing
     available_years = list_available_years(fs, bucket, prefix)
+
     if available_years:
         logger.info(f"📅 Found years via directory listing: {available_years}")
-        return min(available_years)
+
+        # Check years from oldest to newest to find the first accessible year
+        for year in sorted(available_years):
+            # Try multiple dates throughout the year (access might start mid-year)
+            # Check: Jan, Apr, Jul, Oct, Dec (spread across the year)
+            test_months = [1, 4, 7, 10, 12]
+
+            for month in test_months:
+                # Try several days in each month
+                for day in [1, 5, 10, 15, 20, 25]:
+                    try:
+                        test_date = date(year, month, day)
+                        s3_path = build_s3_path(bucket, prefix, test_date)
+
+                        if check_file_accessible(fs, s3_path):
+                            logger.info(
+                                f"✅ Earliest accessible year: {year} (verified via {s3_path})"
+                            )
+                            return year
+                    except ValueError:
+                        continue
+
+        # No accessible files found in any year
+        logger.warning("⚠️ No accessible files found in any listed year")
+        return None
 
     # Fallback: Work backwards from current year
-    logger.info(f"🔍 Searching for earliest accessible year, starting from {current_year}")
+    logger.info(
+        f"🔍 Searching for earliest accessible year, starting from {current_year}"
+    )
 
     for year in range(current_year, current_year - 10, -1):
         # Try first potential trading day of the year (Jan 3-5)
@@ -113,38 +140,21 @@ def find_latest_accessible_date(
     return None
 
 
-@lru_cache(maxsize=4)
-def get_available_date_range(
-    settings: Settings, fs: AbstractFileSystem, data_type: str
+def _get_date_range_cached(
+    fs: AbstractFileSystem, bucket: str, prefix: str, data_type: str
 ) -> Tuple[Optional[date], Optional[date]]:
     """
-    Get the full available date range for a data type.
-
-    This function is cached to avoid repeated boundary detection calls.
+    Internal cached function for getting date range.
 
     Args:
-        settings: Application settings
         fs: fsspec S3 filesystem
+        bucket: S3 bucket name
+        prefix: S3 prefix path
         data_type: Either "stocks" or "options"
 
     Returns:
         Tuple of (earliest_date, latest_date), or (None, None) if no data accessible
-
-    Examples:
-        >>> settings = get_settings()
-        >>> fs = get_polygon_fs(settings)
-        >>> earliest, latest = get_available_date_range(settings, fs, "stocks")
-        (date(2020, 10, 14), date(2025, 10, 15))
     """
-    if data_type == "stocks":
-        bucket = settings.stocks_s3_bucket
-        prefix = settings.stocks_s3_prefix
-    elif data_type == "options":
-        bucket = settings.options_s3_bucket
-        prefix = settings.options_s3_prefix
-    else:
-        raise ValueError(f"Invalid data_type: {data_type}. Must be 'stocks' or 'options'")
-
     logger.info(f"🔍 Detecting data boundaries for {data_type}")
 
     # Find earliest year
@@ -177,6 +187,43 @@ def get_available_date_range(
 
     logger.info(f"🎯 Data range for {data_type}: {earliest_date} to {latest_date}")
     return earliest_date, latest_date
+
+
+def get_available_date_range(
+    settings: Settings, fs: AbstractFileSystem, data_type: str
+) -> Tuple[Optional[date], Optional[date]]:
+    """
+    Get the full available date range for a data type.
+
+    Note: Caching is handled internally using hashable keys.
+
+    Args:
+        settings: Application settings
+        fs: fsspec S3 filesystem
+        data_type: Either "stocks" or "options"
+
+    Returns:
+        Tuple of (earliest_date, latest_date), or (None, None) if no data accessible
+
+    Examples:
+        >>> settings = get_settings()
+        >>> fs = get_polygon_fs(settings)
+        >>> earliest, latest = get_available_date_range(settings, fs, "stocks")
+        (date(2020, 10, 14), date(2025, 10, 15))
+    """
+    if data_type == "stocks":
+        bucket = settings.stocks_s3_bucket
+        prefix = settings.stocks_s3_prefix
+    elif data_type == "options":
+        bucket = settings.options_s3_bucket
+        prefix = settings.options_s3_prefix
+    else:
+        raise ValueError(
+            f"Invalid data_type: {data_type}. Must be 'stocks' or 'options'"
+        )
+
+    # Use internal cached function with hashable parameters
+    return _get_date_range_cached(fs, bucket, prefix, data_type)
 
 
 def build_date_list(start_date: date, end_date: date) -> list[date]:
