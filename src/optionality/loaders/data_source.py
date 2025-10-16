@@ -234,6 +234,29 @@ class S3DataSource(DataSource):
 
         logger.info(f"☁️ Using S3 data source: s3://{self.bucket}/{self.prefix}")
 
+    def _is_year_in_range(
+        self, year: int, start_date: Optional[date], end_date: Optional[date]
+    ) -> bool:
+        """Check if year is within the date range."""
+        if start_date and year < start_date.year:
+            return False
+        if end_date and year > end_date.year:
+            return False
+        return True
+
+    def _filter_dates_in_range(
+        self, dates: List[date], start_date: Optional[date], end_date: Optional[date]
+    ) -> List[date]:
+        """Filter dates to only include those within the specified range."""
+        filtered = []
+        for file_date in dates:
+            if start_date and file_date < start_date:
+                continue
+            if end_date and file_date > end_date:
+                continue
+            filtered.append(file_date)
+        return filtered
+
     def discover_available_dates(
         self, start_date: Optional[date] = None, end_date: Optional[date] = None
     ) -> List[date]:
@@ -258,21 +281,15 @@ class S3DataSource(DataSource):
         all_dates = []
         for year in years:
             # Apply year filter
-            if start_date and year < start_date.year:
-                continue
-            if end_date and year > end_date.year:
+            if not self._is_year_in_range(year, start_date, end_date):
                 continue
 
             # Get all dates for this year
             year_dates = list_available_dates(self.fs, self.bucket, self.prefix, year)
 
             # Apply date filters
-            for file_date in year_dates:
-                if start_date and file_date < start_date:
-                    continue
-                if end_date and file_date > end_date:
-                    continue
-                all_dates.append(file_date)
+            filtered_dates = self._filter_dates_in_range(year_dates, start_date, end_date)
+            all_dates.extend(filtered_dates)
 
         return sorted(all_dates)
 

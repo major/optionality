@@ -14,6 +14,106 @@ class OptionComponents(NamedTuple):
     strike_price: float
 
 
+def _validate_ticker_format(ticker: str) -> Optional[str]:
+    """
+    Validate ticker format and return body without prefix.
+
+    Args:
+        ticker: Raw ticker string
+
+    Returns:
+        Ticker body (without "O:" prefix) if valid, None otherwise
+    """
+    # Validate minimum length: O: (2) + underlying (1+) + date (6) + type (1) + strike (8) = 18+
+    if not ticker or len(ticker) < 18:
+        return None
+
+    # Must start with "O:"
+    if not ticker.startswith("O:"):
+        return None
+
+    # Remove "O:" prefix
+    ticker_body = ticker[2:]
+
+    # Validate minimum body length: underlying (1+) + date (6) + type (1) + strike (8) = 16+
+    if len(ticker_body) < 16:
+        return None
+
+    return ticker_body
+
+
+def _parse_ticker_components(ticker_body: str) -> Optional[tuple[str, str, str, str]]:
+    """
+    Parse ticker body into raw components.
+
+    Args:
+        ticker_body: Ticker without "O:" prefix
+
+    Returns:
+        Tuple of (underlying_raw, date_str, option_type, strike_str) if valid, None otherwise
+    """
+    try:
+        # Parse from RIGHT TO LEFT (fixed-length fields)
+        strike_str = ticker_body[-8:]
+        option_type = ticker_body[-9]
+        date_str = ticker_body[-15:-9]
+        underlying_raw = ticker_body[:-15]
+
+        # Validate component formats
+        if not strike_str.isdigit() or len(strike_str) != 8:
+            return None
+        if option_type not in ('C', 'P'):
+            return None
+        if not date_str.isdigit() or len(date_str) != 6:
+            return None
+
+        # Extract only A-Z letters for the underlying symbol
+        underlying = re.sub(r'[^A-Z]', '', underlying_raw.upper())
+        if not underlying:  # Must have at least 1 letter
+            return None
+
+        return underlying, date_str, option_type, strike_str
+
+    except (IndexError, ValueError):
+        return None
+
+
+def _convert_components_to_values(
+    underlying: str, date_str: str, option_type: str, strike_str: str
+) -> Optional[OptionComponents]:
+    """
+    Convert raw string components to typed values.
+
+    Args:
+        underlying: Underlying ticker symbol
+        date_str: Date string in YYMMDD format
+        option_type: 'C' or 'P'
+        strike_str: Strike price as 8-digit string
+
+    Returns:
+        OptionComponents if conversion succeeds, None otherwise
+    """
+    try:
+        # Parse date: YYMMDD
+        year = int("20" + date_str[0:2])  # Assume 20xx century
+        month = int(date_str[2:4])
+        day = int(date_str[4:6])
+        expiration = date(year, month, day)
+
+        # Parse strike price (divide by 1000)
+        strike = int(strike_str) / 1000.0
+
+        return OptionComponents(
+            underlying_symbol=underlying,
+            expiration_date=expiration,
+            option_type=option_type,
+            strike_price=strike,
+        )
+
+    except (ValueError, OverflowError):
+        return None
+
+
 def parse_options_ticker(ticker: str) -> Optional[OptionComponents]:
     """
     Parse an options ticker in Polygon OCC format to extract components.
@@ -50,69 +150,18 @@ def parse_options_ticker(ticker: str) -> Optional[OptionComponents]:
         OptionComponents(underlying_symbol='AQMS', expiration_date=datetime.date(2025, 10, 17),
                         option_type='P', strike_price=2.5)
     """
-    # Validate minimum length: O: (2) + underlying (1+) + date (6) + type (1) + strike (8) = 18+
-    if not ticker or len(ticker) < 18:
+    # Step 1: Validate format and extract body
+    ticker_body = _validate_ticker_format(ticker)
+    if ticker_body is None:
         return None
 
-    # Must start with "O:"
-    if not ticker.startswith("O:"):
+    # Step 2: Parse components from ticker body
+    components = _parse_ticker_components(ticker_body)
+    if components is None:
         return None
 
-    # Remove "O:" prefix
-    ticker_body = ticker[2:]
-
-    # Validate minimum body length: underlying (1+) + date (6) + type (1) + strike (8) = 16+
-    if len(ticker_body) < 16:
-        return None
-
-    try:
-        # Parse from RIGHT TO LEFT (fixed-length fields)
-        # Last 8 characters: strike price
-        strike_str = ticker_body[-8:]
-
-        # 9th character from right: option type (C or P)
-        option_type = ticker_body[-9]
-
-        # Characters at positions -15 to -9 (6 digits): expiration date
-        date_str = ticker_body[-15:-9]
-
-        # Everything before that: potential underlying symbol (may contain digits to discard)
-        underlying_raw = ticker_body[:-15]
-
-        # Extract only A-Z letters for the underlying symbol
-        underlying = re.sub(r'[^A-Z]', '', underlying_raw.upper())
-
-        # Validate components
-        if not underlying:  # Must have at least 1 letter
-            return None
-
-        if option_type not in ('C', 'P'):
-            return None
-
-        if not strike_str.isdigit() or len(strike_str) != 8:
-            return None
-
-        if not date_str.isdigit() or len(date_str) != 6:
-            return None
-
-        # Parse date: YYMMDD
-        year = int("20" + date_str[0:2])  # Assume 20xx century
-        month = int(date_str[2:4])
-        day = int(date_str[4:6])
-        expiration = date(year, month, day)
-
-        # Parse strike price (divide by 1000)
-        strike = int(strike_str) / 1000.0
-
-        return OptionComponents(
-            underlying_symbol=underlying,
-            expiration_date=expiration,
-            option_type=option_type,
-            strike_price=strike,
-        )
-
-    except (ValueError, OverflowError, IndexError):
-        return None
+    # Step 3: Convert to typed values
+    return _convert_components_to_values(*components)
 
 
 def convert_nanosecond_timestamp(ns_timestamp: int) -> datetime:

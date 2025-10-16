@@ -126,6 +126,95 @@ def spot_check_ticker(
     return results
 
 
+def _select_check_dates_for_splits(splits_df: pl.DataFrame) -> list[date]:
+    """
+    Select dates to check for splits verification.
+
+    For each split, checks:
+    - Historical date (30 days before split)
+    - Day before split execution
+    - Split execution day
+    - Day after split execution
+
+    Args:
+        splits_df: DataFrame containing split information
+
+    Returns:
+        Sorted list of unique dates to check
+    """
+    check_dates = []
+
+    for split in splits_df.iter_rows(named=True):
+        execution_date = split["execution_date"]
+
+        # Add historical date (30+ days before split)
+        historical_date = execution_date - timedelta(days=30)
+        check_dates.append(historical_date)
+
+        # Add day before split
+        day_before = execution_date - timedelta(days=1)
+        check_dates.append(day_before)
+
+        # Add split execution day (critical!)
+        check_dates.append(execution_date)
+
+        # Add day after split
+        day_after = execution_date + timedelta(days=1)
+        check_dates.append(day_after)
+
+    # Remove duplicates and sort
+    return sorted(list(set(check_dates)))
+
+
+def _print_ticker_summary(ticker: str, ticker_results: Dict[str, Any]) -> None:
+    """Print summary for a single ticker's results."""
+    if ticker_results["failed"] > 0:
+        logger.error(
+            f"  ❌ {ticker}: {ticker_results['passed']}/{ticker_results['dates_checked']} passed "
+            f"({ticker_results['failed']} failed, {ticker_results['errors']} errors)"
+        )
+    else:
+        logger.success(
+            f"  ✅ {ticker}: {ticker_results['passed']}/{ticker_results['dates_checked']} passed "
+            f"({ticker_results['errors']} errors)"
+        )
+
+
+def _print_overall_summary(overall_results: Dict[str, Any]) -> None:
+    """Print overall summary of spot check results."""
+    logger.info("=" * 60)
+    logger.info("📊 Spot Check Summary")
+    logger.info("=" * 60)
+    logger.info(f"Tickers checked: {overall_results['tickers_checked']}")
+    logger.info(f"Total date checks: {overall_results['total_checks']}")
+    logger.success(f"✅ Passed: {overall_results['passed']}")
+
+    if overall_results['failed'] > 0:
+        logger.error(f"❌ Failed: {overall_results['failed']}")
+    else:
+        logger.info("✅ Failed: 0")
+
+    if overall_results['errors'] > 0:
+        logger.warning(f"⚠️ Errors: {overall_results['errors']}")
+    else:
+        logger.info("✅ Errors: 0")
+
+
+def _print_failed_checks(overall_results: Dict[str, Any]) -> None:
+    """Print detailed information about failed checks."""
+    logger.error("❌ Failed Checks:")
+
+    for ticker_result in overall_results["ticker_results"]:
+        for detail in ticker_result["details"]:
+            if detail["status"] == "fail":
+                logger.error(
+                    f"  {ticker_result['ticker']} | {detail['date']} | "
+                    f"Our: ${detail['our_price']:.2f} | "
+                    f"Polygon: ${detail['polygon_price']:.2f} | "
+                    f"Diff: {detail['diff_percent']:.2f}%"
+                )
+
+
 def run_spot_checks(
     polygon_client: PolygonClient,
     num_tickers: int = 5,
@@ -204,34 +293,13 @@ def run_spot_checks(
             continue
 
         # Select dates to check
-        check_dates = []
-
-        for split in splits_df.iter_rows(named=True):
-            execution_date = split["execution_date"]
-
-            # Add historical date (30+ days before split)
-            historical_date = execution_date - timedelta(days=30)
-            check_dates.append(historical_date)
-
-            # Add day before split
-            day_before = execution_date - timedelta(days=1)
-            check_dates.append(day_before)
-
-            # Add split execution day (critical!)
-            check_dates.append(execution_date)
-
-            # Add day after split
-            day_after = execution_date + timedelta(days=1)
-            check_dates.append(day_after)
-
-        # Remove duplicates and sort
-        check_dates = sorted(list(set(check_dates)))
-
+        check_dates = _select_check_dates_for_splits(splits_df)
         logger.info(f"  📅 Checking {len(check_dates)} dates...")
 
         # Run spot checks
         ticker_results = spot_check_ticker(polygon_client, ticker, check_dates)
 
+        # Aggregate results
         overall_results["tickers_checked"] += 1
         overall_results["total_checks"] += ticker_results["dates_checked"]
         overall_results["passed"] += ticker_results["passed"]
@@ -240,48 +308,14 @@ def run_spot_checks(
         overall_results["ticker_results"].append(ticker_results)
 
         # Print summary for this ticker
-        if ticker_results["failed"] > 0:
-            logger.error(
-                f"  ❌ {ticker}: {ticker_results['passed']}/{ticker_results['dates_checked']} passed "
-                f"({ticker_results['failed']} failed, {ticker_results['errors']} errors)"
-            )
-        else:
-            logger.success(
-                f"  ✅ {ticker}: {ticker_results['passed']}/{ticker_results['dates_checked']} passed "
-                f"({ticker_results['errors']} errors)"
-            )
+        _print_ticker_summary(ticker, ticker_results)
 
     # Print overall summary
-    logger.info("=" * 60)
-    logger.info("📊 Spot Check Summary")
-    logger.info("=" * 60)
-    logger.info(f"Tickers checked: {overall_results['tickers_checked']}")
-    logger.info(f"Total date checks: {overall_results['total_checks']}")
-    logger.success(f"✅ Passed: {overall_results['passed']}")
-
-    if overall_results['failed'] > 0:
-        logger.error(f"❌ Failed: {overall_results['failed']}")
-    else:
-        logger.info("✅ Failed: 0")
-
-    if overall_results['errors'] > 0:
-        logger.warning(f"⚠️ Errors: {overall_results['errors']}")
-    else:
-        logger.info("✅ Errors: 0")
+    _print_overall_summary(overall_results)
 
     # Show detailed failure table if any failed
     if overall_results["failed"] > 0:
-        logger.error("❌ Failed Checks:")
-
-        for ticker_result in overall_results["ticker_results"]:
-            for detail in ticker_result["details"]:
-                if detail["status"] == "fail":
-                    logger.error(
-                        f"  {ticker_result['ticker']} | {detail['date']} | "
-                        f"Our: ${detail['our_price']:.2f} | "
-                        f"Polygon: ${detail['polygon_price']:.2f} | "
-                        f"Diff: {detail['diff_percent']:.2f}%"
-                    )
+        _print_failed_checks(overall_results)
 
         raise VerificationFailure(
             f"{overall_results['failed']} spot checks failed! "

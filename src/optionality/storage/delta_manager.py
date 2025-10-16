@@ -526,6 +526,32 @@ class DeltaLakeManager:
 
     # ==================== STATISTICS ====================
 
+    def _get_single_table_stats(
+        self, table_path: str, date_column: Optional[str] = None
+    ) -> dict[str, Any]:
+        """
+        Get statistics for a single Delta table.
+
+        Args:
+            table_path: Path to the Delta table
+            date_column: Name of the date column to get min/max dates (None if no dates)
+
+        Returns:
+            Dictionary with count and optional date range
+        """
+        if not self._table_exists(table_path):
+            return {}
+
+        lf = pl.scan_delta(table_path, storage_options=self.storage_options)
+        count = lf.select(pl.len()).collect().item()
+
+        if date_column and count > 0:
+            min_date = lf.select(pl.col(date_column).min()).collect().item()
+            max_date = lf.select(pl.col(date_column).max()).collect().item()
+            return {"count": count, "min_date": min_date, "max_date": max_date}
+        else:
+            return {"count": count}
+
     def get_table_stats(self) -> dict[str, dict[str, Any]]:
         """
         Get statistics for all Delta tables.
@@ -533,45 +559,20 @@ class DeltaLakeManager:
         Returns:
             Dictionary with table stats (row count, date ranges, etc.)
         """
+        # Define table configurations: (name, path, date_column)
+        table_configs = [
+            ("stocks_raw", self.stocks_raw_path, "window_start"),
+            ("stocks_adjusted", self.stocks_adjusted_path, "window_start"),
+            ("splits", self.splits_path, "execution_date"),
+            ("options", self.options_path, "window_start"),
+            ("tickers", self.tickers_path, None),  # No date column
+        ]
+
         stats = {}
-
-        # Stocks raw
-        if self._table_exists(self.stocks_raw_path):
-            lf = pl.scan_delta(self.stocks_raw_path, storage_options=self.storage_options)
-            count = lf.select(pl.len()).collect().item()
-            min_date = lf.select(pl.col("window_start").min()).collect().item() if count > 0 else None
-            max_date = lf.select(pl.col("window_start").max()).collect().item() if count > 0 else None
-            stats["stocks_raw"] = {"count": count, "min_date": min_date, "max_date": max_date}
-
-        # Stocks adjusted
-        if self._table_exists(self.stocks_adjusted_path):
-            lf = pl.scan_delta(self.stocks_adjusted_path, storage_options=self.storage_options)
-            count = lf.select(pl.len()).collect().item()
-            min_date = lf.select(pl.col("window_start").min()).collect().item() if count > 0 else None
-            max_date = lf.select(pl.col("window_start").max()).collect().item() if count > 0 else None
-            stats["stocks_adjusted"] = {"count": count, "min_date": min_date, "max_date": max_date}
-
-        # Splits
-        if self._table_exists(self.splits_path):
-            lf = pl.scan_delta(self.splits_path, storage_options=self.storage_options)
-            count = lf.select(pl.len()).collect().item()
-            min_date = lf.select(pl.col("execution_date").min()).collect().item() if count > 0 else None
-            max_date = lf.select(pl.col("execution_date").max()).collect().item() if count > 0 else None
-            stats["splits"] = {"count": count, "min_date": min_date, "max_date": max_date}
-
-        # Options
-        if self._table_exists(self.options_path):
-            lf = pl.scan_delta(self.options_path, storage_options=self.storage_options)
-            count = lf.select(pl.len()).collect().item()
-            min_date = lf.select(pl.col("window_start").min()).collect().item() if count > 0 else None
-            max_date = lf.select(pl.col("window_start").max()).collect().item() if count > 0 else None
-            stats["options"] = {"count": count, "min_date": min_date, "max_date": max_date}
-
-        # Tickers
-        if self._table_exists(self.tickers_path):
-            lf = pl.scan_delta(self.tickers_path, storage_options=self.storage_options)
-            count = lf.select(pl.len()).collect().item()
-            stats["tickers"] = {"count": count}
+        for name, path, date_column in table_configs:
+            table_stats = self._get_single_table_stats(path, date_column)
+            if table_stats:  # Only add if table exists
+                stats[name] = table_stats
 
         return stats
 
