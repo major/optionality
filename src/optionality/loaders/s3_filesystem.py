@@ -2,7 +2,6 @@
 
 from datetime import date
 from typing import List, Optional
-from functools import lru_cache
 
 import fsspec
 from fsspec import AbstractFileSystem
@@ -11,12 +10,9 @@ from optionality.config import Settings
 from optionality.logger import logger
 
 
-@lru_cache(maxsize=1)
 def get_polygon_fs(settings: Settings) -> AbstractFileSystem:
     """
     Get configured fsspec S3 filesystem for Polygon flatfiles.
-
-    This function is cached to reuse the filesystem connection.
 
     Args:
         settings: Application settings containing S3 credentials
