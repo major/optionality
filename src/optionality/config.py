@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     polygon_flatfiles_endpoint: str = "https://files.polygon.io"
 
     # Data source configuration (for flatfiles)
-    data_source: str = "local"  # "local" or "s3"
+    data_source: str = "s3"  # "local" or "s3"
 
     # S3 bucket and prefix settings (for Polygon flatfiles)
     stocks_s3_bucket: str = "flatfiles"
