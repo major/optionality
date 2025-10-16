@@ -28,7 +28,7 @@ env:
 
 jobs:
   update:
-    name: 📊 Update Delta Tables in S3
+    name: 📊 Update Data
     runs-on: ubuntu-latest
 
     steps:
