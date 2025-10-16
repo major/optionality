@@ -1,10 +1,9 @@
 """Base flatfile loader with discovery and streaming capabilities."""
 
 from pathlib import Path
-from typing import List, Iterator, Optional, Callable, Awaitable, Any
+from typing import List, Iterator, Optional
 from datetime import date
 import gzip
-import asyncio
 
 import polars as pl
 
@@ -190,40 +189,6 @@ def get_earliest_flatfile_date(base_path: Path, pattern: str = "**/*.csv.gz") ->
                 continue
 
     return earliest_date
-
-
-async def process_files_parallel(
-    files: List[Path],
-    processor: Callable[[Path], Awaitable[Any]],
-    max_concurrent: int = 4,
-) -> List[Any]:
-    """
-    Process multiple files in parallel with concurrency control.
-
-    Args:
-        files: List of file paths to process
-        processor: Async function that processes a single file
-        max_concurrent: Maximum number of concurrent file operations (default: 4)
-
-    Returns:
-        List of results from processing each file
-
-    Examples:
-        >>> async def load_file(path):
-        ...     return await load_stock_file(db, path)
-        >>> results = await process_files_parallel(files, load_file, max_concurrent=8)
-    """
-    semaphore = asyncio.Semaphore(max_concurrent)
-
-    async def process_with_limit(file_path: Path) -> Any:
-        async with semaphore:
-            return await processor(file_path)
-
-    # Create tasks for all files
-    tasks = [process_with_limit(file_path) for file_path in files]
-
-    # Wait for all tasks to complete
-    return await asyncio.gather(*tasks, return_exceptions=True)
 
 
 # S3 Utilities for Polars Direct Scanning

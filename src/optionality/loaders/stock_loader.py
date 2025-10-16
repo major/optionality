@@ -2,9 +2,9 @@
 
 from pathlib import Path
 from datetime import date, datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import polars as pl
+import pandas_market_calendars as mcal
 from rich.progress import Progress, BarColumn, TextColumn, TimeRemainingColumn
 
 from optionality.loaders.data_source import DataSource
@@ -64,66 +64,26 @@ def load_stock_file(
         raise
 
 
-def _load_single_file_raw(data_source: DataSource, target_date: date) -> tuple[pl.DataFrame, str]:
-    """
-    Load a single stock file and return raw DataFrame.
-
-    Helper function for parallel loading - does NOT write to Delta.
-
-    Args:
-        data_source: DataSource instance (local or S3)
-        target_date: Date to load
-
-    Returns:
-        Tuple of (DataFrame, date_string)
-
-    Raises:
-        Exception if file cannot be loaded
-    """
-    # Read CSV.GZ file using data source (handles local or S3!)
-    df = data_source.read_csv_gz(target_date)
-
-    date_str = target_date.isoformat()
-
-    if len(df) == 0:
-        logger.warning(f"  ⚠️ {date_str}: Empty file")
-        return df, date_str
-
-    # Convert nanosecond timestamp to datetime (data transformation)
-    df = df.with_columns(
-        (pl.col("window_start") / 1_000_000).alias("window_start")
-    )
-
-    return df, date_str
-
-
-def load_stock_files_parallel(
+def load_stock_files_sequential(
     data_source: DataSource,
     dates: list[date],
-    batch_size: int = 50,
 ) -> dict:
     """
-    Load multiple stock files in parallel to raw table only.
+    Load multiple stock files sequentially to raw table only.
 
-    Phase 1 of two-phase loading: loads raw data efficiently using
-    concurrent file reading and batched writes.
+    Phase 1 of two-phase loading: loads raw data one file at a time.
 
     Args:
         data_source: DataSource instance (local or S3)
         dates: List of dates to load
-        batch_size: Number of files to accumulate before writing to Delta
 
     Returns:
         Dictionary with stats: files_processed, raw_rows, errors
     """
-    settings = get_settings()
-    max_workers = settings.max_concurrent_file_processing
-
-    logger.info(f"🚀 Loading {len(dates)} dates in parallel (max workers: {max_workers})...")
+    logger.info(f"📦 Loading {len(dates)} dates sequentially...")
 
     total_raw_rows = 0
     errors = 0
-    dataframes_batch = []
     files_processed = 0
 
     with Progress(
@@ -134,46 +94,33 @@ def load_stock_files_parallel(
     ) as progress:
         task = progress.add_task("Loading raw stock files...", total=len(dates))
 
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all dates for parallel reading
-            future_to_date = {
-                executor.submit(_load_single_file_raw, data_source, target_date): target_date
-                for target_date in dates
-            }
+        for target_date in dates:
+            try:
+                # Read CSV.GZ file using data source (handles local or S3!)
+                df = data_source.read_csv_gz(target_date)
 
-            # Process completed files as they finish
-            for future in as_completed(future_to_date):
-                target_date = future_to_date[future]
-                try:
-                    df, date_str = future.result()
+                if len(df) == 0:
+                    logger.warning(f"  ⚠️ {target_date}: Empty file")
+                    progress.update(task, advance=1)
+                    continue
 
-                    if len(df) > 0:
-                        dataframes_batch.append(df)
-                        total_raw_rows += len(df)
-                        files_processed += 1
+                # Convert nanosecond timestamp to datetime (data transformation)
+                df = df.with_columns(
+                    (pl.col("window_start") / 1_000_000).alias("window_start")
+                )
 
-                        logger.info(f"  📈 Loaded {target_date}: {len(df):,} rows")
+                # Write raw data immediately
+                delta.write_stocks_raw(df, mode="append")
 
-                        # Write batch if we've accumulated enough DataFrames
-                        if len(dataframes_batch) >= batch_size:
-                            combined_df = pl.concat(dataframes_batch)
-                            delta.write_stocks_raw(combined_df, mode="append")
-                            logger.info(f"  💾 Wrote batch of {len(dataframes_batch)} files ({len(combined_df):,} rows)")
-                            dataframes_batch = []
-                    else:
-                        logger.warning(f"  ⚠️ {target_date}: Empty file")
+                total_raw_rows += len(df)
+                files_processed += 1
+                logger.info(f"  📈 Loaded {target_date}: {len(df):,} rows")
 
-                except Exception as e:
-                    errors += 1
-                    logger.error(f"  ❌ {target_date}: {e}")
+            except Exception as e:
+                errors += 1
+                logger.error(f"  ❌ {target_date}: {e}")
 
-                progress.update(task, advance=1)
-
-    # Write any remaining DataFrames
-    if dataframes_batch:
-        combined_df = pl.concat(dataframes_batch)
-        delta.write_stocks_raw(combined_df, mode="append")
-        logger.info(f"  💾 Wrote final batch of {len(dataframes_batch)} files ({len(combined_df):,} rows)")
+            progress.update(task, advance=1)
 
     logger.success(
         f"✅ Loaded {total_raw_rows:,} raw rows from {files_processed} files ({errors} errors)"
@@ -337,9 +284,9 @@ def load_incremental_stock_files() -> dict:
     logger.info(f"📊 Found {len(missing_dates)} missing dates to load")
     logger.info(f"📅 Date range: {missing_dates[0]} to {missing_dates[-1]}")
 
-    # PHASE 1: Load raw data in parallel 🚀
-    logger.info("🔵 Phase 1: Loading raw data in parallel...")
-    raw_stats = load_stock_files_parallel(data_source, missing_dates)
+    # PHASE 1: Load raw data sequentially 📦
+    logger.info("🔵 Phase 1: Loading raw data sequentially...")
+    raw_stats = load_stock_files_sequential(data_source, missing_dates)
 
     # PHASE 2: Recalculate all adjustments 🧮
     logger.info("🟢 Phase 2: Recalculating adjustments...")

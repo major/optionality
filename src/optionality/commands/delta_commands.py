@@ -10,9 +10,10 @@ from optionality.storage.delta_manager import delta
 from optionality.polygon_client import PolygonClient
 from optionality.loaders.stock_loader import (
     load_all_stock_files,
-    load_stock_files_parallel,
+    load_stock_files_sequential,
     recalculate_all_adjustments,
 )
+from optionality.loaders.stock_loader_gap_check import check_and_fill_trading_day_gaps
 from optionality.loaders.options_loader import (
     load_all_options_files,
     load_incremental_options_files,
@@ -66,6 +67,14 @@ def cmd_load() -> None:
         logger.info("📊 Step 4: Syncing ALL stock splits...")
         splits_count = sync_all_splits(polygon_client)
         logger.info(f"  ✂️ Synced {splits_count:,} splits")
+
+        # Check for gaps and backfill
+        logger.info("📊 Step 5: Checking for missing trading days...")
+        gap_stats = check_and_fill_trading_day_gaps()
+        if gap_stats["dates_filled"] > 0:
+            logger.info(f"  🔧 Backfilled {gap_stats['dates_filled']} missing trading days")
+        else:
+            logger.info("  ✅ No gaps found")
 
         # Show stats
         logger.info("📊 Delta Lake Statistics:")
@@ -126,7 +135,7 @@ def cmd_update() -> None:
                 logger.info(f"📅 Date range: {missing_dates[0]} to {missing_dates[-1]}")
 
                 # Load raw data only (no adjustments)
-                raw_stats = load_stock_files_parallel(data_source, missing_dates)
+                raw_stats = load_stock_files_sequential(data_source, missing_dates)
                 logger.info(
                     f"  📈 Loaded {raw_stats['raw_rows']:,} raw rows from "
                     f"{raw_stats['files_processed']} files"
@@ -148,8 +157,16 @@ def cmd_update() -> None:
         adjusted_rows = recalculate_all_adjustments()
         logger.info(f"  🔄 Recalculated {adjusted_rows:,} adjusted rows")
 
+        # PHASE 4: Check for gaps and backfill missing trading days
+        logger.info("📊 Step 4: Checking for missing trading days...")
+        gap_stats = check_and_fill_trading_day_gaps()
+        if gap_stats["dates_filled"] > 0:
+            logger.info(f"  🔧 Backfilled {gap_stats['dates_filled']} missing trading days")
+        else:
+            logger.info("  ✅ No gaps found")
+
         # Load incremental options data
-        logger.info("📊 Step 4: Loading new options data...")
+        logger.info("📊 Step 5: Loading new options data...")
         options_stats = load_incremental_options_files()
         logger.info(
             f"  📉 Loaded {options_stats['rows_inserted']:,} options rows from "
@@ -157,12 +174,12 @@ def cmd_update() -> None:
         )
 
         # Sync tickers
-        logger.info("📊 Step 5: Syncing ticker metadata...")
+        logger.info("📊 Step 6: Syncing ticker metadata...")
         ticker_count = sync_tickers(polygon_client)
         logger.info(f"  🏷️ Synced {ticker_count:,} tickers")
 
         # Run verification
-        logger.info("📊 Step 6: Running spot checks...")
+        logger.info("📊 Step 7: Running spot checks...")
         run_spot_checks(polygon_client, num_tickers=5)
 
         # Show stats

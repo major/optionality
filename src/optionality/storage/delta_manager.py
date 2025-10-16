@@ -441,8 +441,11 @@ class DeltaLakeManager:
             df: DataFrame with stock data
             mode: Write mode ("append", "overwrite", "merge")
         """
-        # Cast to schema
-        df = df.select([pl.col(col).cast(dtype) for col, dtype in STOCKS_RAW_SCHEMA.items()])
+        # Cast to schema and sort by ticker, then date (for time-series analysis)
+        df = (
+            df.select([pl.col(col).cast(dtype) for col, dtype in STOCKS_RAW_SCHEMA.items()])
+            .sort("ticker", "window_start")
+        )
 
         self._write_with_compression(self.stocks_raw_path, df, mode, ["ticker"])
 
@@ -460,8 +463,11 @@ class DeltaLakeManager:
             df: DataFrame with adjusted stock data
             mode: Write mode ("append", "overwrite", "merge")
         """
-        # Cast to schema
-        df = df.select([pl.col(col).cast(dtype) for col, dtype in STOCKS_ADJUSTED_SCHEMA.items()])
+        # Cast to schema and sort by ticker, then date (for time-series analysis)
+        df = (
+            df.select([pl.col(col).cast(dtype) for col, dtype in STOCKS_ADJUSTED_SCHEMA.items()])
+            .sort("ticker", "window_start")
+        )
 
         self._write_with_compression(self.stocks_adjusted_path, df, mode, ["ticker"])
 
@@ -498,8 +504,11 @@ class DeltaLakeManager:
             df: DataFrame with options data
             mode: Write mode ("append", "overwrite", "merge")
         """
-        # Cast to schema
-        df = df.select([pl.col(col).cast(dtype) for col, dtype in OPTIONS_SCHEMA.items()])
+        # Cast to schema and sort by underlying_symbol, then date (for time-series analysis)
+        df = (
+            df.select([pl.col(col).cast(dtype) for col, dtype in OPTIONS_SCHEMA.items()])
+            .sort("underlying_symbol", "window_start")
+        )
 
         self._write_with_compression(self.options_path, df, mode, ["underlying_symbol"])
 

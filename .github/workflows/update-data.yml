@@ -93,7 +93,7 @@ jobs:
         run: |
           echo "🌟 Starting incremental update..."
           echo "📍 Delta tables will be stored in: $STORAGE_PATH"
-          uv run optionality update
+          make update
 
       - name: 🔍 Run verification
         if: steps.check_files.outcome == 'success' && inputs.run_verification != false
@@ -101,7 +101,7 @@ jobs:
           POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
         run: |
           echo "🔍 Running verification spot checks..."
-          uv run optionality verify
+          make verify
 
       - name: 📊 Show statistics
         if: steps.check_files.outcome == 'success'
