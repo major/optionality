@@ -44,28 +44,51 @@ def find_earliest_accessible_year(
     available_years = list_available_years(fs, bucket, prefix)
 
     if available_years:
-        logger.info(f"📅 Found years via directory listing: {available_years}")
+        # Check years from NEWEST to OLDEST (faster - recent data more likely accessible)
+        # When we find the first inaccessible year, the previous year is our earliest
+        earliest_accessible_year = None
 
-        # Check years from oldest to newest to find the first accessible year
-        for year in sorted(available_years):
+        for year in sorted(available_years, reverse=True):
             # Try multiple dates throughout the year (access might start mid-year)
-            # Check: Jan, Apr, Jul, Oct, Dec (spread across the year)
-            test_months = [1, 4, 7, 10, 12]
+            # Check months from December backwards (faster)
+            test_months = [12, 10, 7, 4, 1]
 
+            year_is_accessible = False
             for month in test_months:
-                # Try several days in each month
-                for day in [1, 5, 10, 15, 20, 25]:
+                # Try several days in each month (from end to beginning)
+                for day in [25, 20, 15, 10, 5, 1]:
                     try:
                         test_date = date(year, month, day)
                         s3_path = build_s3_path(bucket, prefix, test_date)
 
                         if check_file_accessible(fs, s3_path):
-                            logger.info(
-                                f"✅ Earliest accessible year: {year} (verified via {s3_path})"
-                            )
-                            return year
+                            # This year is accessible!
+                            earliest_accessible_year = year
+                            year_is_accessible = True
+                            logger.debug(f"✅ Year {year} is accessible (found {s3_path})")
+                            break
                     except ValueError:
                         continue
+
+                if year_is_accessible:
+                    break
+
+            # If this year is NOT accessible and we found an accessible year before,
+            # we've found the boundary!
+            if not year_is_accessible and earliest_accessible_year is not None:
+                logger.info(
+                    f"✅ Earliest accessible year: {earliest_accessible_year} "
+                    f"(year {year} not accessible)"
+                )
+                return earliest_accessible_year
+
+        # If we get here, either all years are accessible or we found the oldest accessible year
+        if earliest_accessible_year:
+            logger.info(
+                f"✅ Earliest accessible year: {earliest_accessible_year} "
+                f"(all tested years back to {earliest_accessible_year} are accessible)"
+            )
+            return earliest_accessible_year
 
         # No accessible files found in any year
         logger.warning("⚠️ No accessible files found in any listed year")

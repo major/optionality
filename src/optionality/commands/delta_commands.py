@@ -1,14 +1,17 @@
 """Main commands for Delta Lake-based optionality system."""
 
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from zoneinfo import ZoneInfo
+
+import polars as pl
 
 from optionality.storage.delta_manager import delta
 from optionality.polygon_client import PolygonClient
 from optionality.loaders.stock_loader import (
     load_all_stock_files,
-    load_incremental_stock_files,
+    load_stock_files_parallel,
+    recalculate_all_adjustments,
 )
 from optionality.loaders.options_loader import (
     load_all_options_files,
@@ -19,6 +22,7 @@ from optionality.loaders.s3_filesystem import (
     build_s3_path,
     check_file_accessible,
 )
+from optionality.loaders import create_data_source
 from optionality.config import get_settings
 from optionality.sync.splits import sync_all_splits
 from optionality.sync.tickers import sync_tickers
@@ -85,32 +89,80 @@ def cmd_load() -> None:
 def cmd_update() -> None:
     """Run incremental daily update."""
     try:
+        settings = get_settings()
         polygon_client = PolygonClient()
 
-        # Sync ALL splits (fresh data every time!)
-        logger.info("📊 Step 1: Syncing ALL stock splits...")
+        # PHASE 1: Load raw stock data (no adjustments yet)
+        logger.info("📊 Step 1: Loading new stock data (raw only)...")
+        data_source = create_data_source(settings, "stocks")
+
+        # Discover all available dates from data source
+        all_dates = data_source.discover_available_dates()
+
+        if all_dates:
+            # Convert to set of date strings for comparison
+            file_dates = set(d.isoformat() for d in all_dates)
+
+            # Get all dates that exist in Delta table
+            if delta._table_exists(delta.stocks_raw_path):
+                existing_df = (
+                    delta.scan_stocks_raw()
+                    .select(pl.col("window_start").cast(pl.Date).alias("date"))
+                    .unique()
+                    .collect()
+                )
+                db_date_set = set(str(d) for d in existing_df["date"].to_list())
+            else:
+                db_date_set = set()
+
+            # Find missing dates (in files but not in Delta table)
+            missing_date_strs = file_dates - db_date_set
+
+            if missing_date_strs:
+                # Convert back to date objects and sort
+                missing_dates = sorted([date.fromisoformat(d) for d in missing_date_strs])
+
+                logger.info(f"📊 Found {len(missing_dates)} missing dates to load")
+                logger.info(f"📅 Date range: {missing_dates[0]} to {missing_dates[-1]}")
+
+                # Load raw data only (no adjustments)
+                raw_stats = load_stock_files_parallel(data_source, missing_dates)
+                logger.info(
+                    f"  📈 Loaded {raw_stats['raw_rows']:,} raw rows from "
+                    f"{raw_stats['files_processed']} files"
+                )
+            else:
+                logger.info("✅ No new stock data to load")
+                raw_stats = {"files_processed": 0, "raw_rows": 0, "errors": 0}
+        else:
+            logger.warning("⚠️ No stock data found in source")
+            raw_stats = {"files_processed": 0, "raw_rows": 0, "errors": 0}
+
+        # PHASE 2: Sync splits (now we have the date range from Delta)
+        logger.info("📊 Step 2: Syncing ALL stock splits...")
         splits_count = sync_all_splits(polygon_client)
         logger.info(f"  ✂️ Synced {splits_count:,} splits")
 
-        # Load incremental stock data
-        logger.info("📊 Step 2: Loading new stock data...")
-        stock_stats = load_incremental_stock_files()
-        logger.info(
-            f"  📈 Loaded {stock_stats['raw_rows']:,} raw rows, "
-            f"{stock_stats['adjusted_rows']:,} adjusted rows from "
-            f"{stock_stats['files_processed']} files"
-        )
+        # PHASE 3: Recalculate adjustments (with fresh splits)
+        logger.info("📊 Step 3: Recalculating adjustments with fresh splits...")
+        adjusted_rows = recalculate_all_adjustments()
+        logger.info(f"  🔄 Recalculated {adjusted_rows:,} adjusted rows")
 
         # Load incremental options data
-        logger.info("📊 Step 3: Loading new options data...")
+        logger.info("📊 Step 4: Loading new options data...")
         options_stats = load_incremental_options_files()
         logger.info(
             f"  📉 Loaded {options_stats['rows_inserted']:,} options rows from "
             f"{options_stats['files_processed']} files"
         )
 
+        # Sync tickers
+        logger.info("📊 Step 5: Syncing ticker metadata...")
+        ticker_count = sync_tickers(polygon_client)
+        logger.info(f"  🏷️ Synced {ticker_count:,} tickers")
+
         # Run verification
-        logger.info("📊 Step 4: Running spot checks...")
+        logger.info("📊 Step 6: Running spot checks...")
         run_spot_checks(polygon_client, num_tickers=5)
 
         # Show stats

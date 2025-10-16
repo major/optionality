@@ -152,12 +152,16 @@ def load_stock_files_parallel(
                         total_raw_rows += len(df)
                         files_processed += 1
 
+                        logger.info(f"  📈 Loaded {target_date}: {len(df):,} rows")
+
                         # Write batch if we've accumulated enough DataFrames
                         if len(dataframes_batch) >= batch_size:
                             combined_df = pl.concat(dataframes_batch)
                             delta.write_stocks_raw(combined_df, mode="append")
                             logger.info(f"  💾 Wrote batch of {len(dataframes_batch)} files ({len(combined_df):,} rows)")
                             dataframes_batch = []
+                    else:
+                        logger.warning(f"  ⚠️ {target_date}: Empty file")
 
                 except Exception as e:
                     errors += 1

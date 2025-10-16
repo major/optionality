@@ -19,7 +19,7 @@ def sync_all_splits(
     Sync ALL splits using efficient bulk API query.
 
     Strategy:
-    1. Find earliest date from stock flatfiles
+    1. Find earliest date from Delta Lake stocks table
     2. Download ALL splits from Polygon (bulk query - cheap!)
     3. Overwrite existing splits table
     4. Return count of splits synced
@@ -34,13 +34,23 @@ def sync_all_splits(
     """
     settings = get_settings()
 
-    # Get earliest stock flatfile date
-    stocks_path = settings.flatfiles_path / "stocks"
-    earliest_date = get_earliest_flatfile_date(stocks_path)
-
-    if earliest_date is None:
-        logger.warning("⚠️ No stock flatfiles found, cannot determine date range")
+    # Get earliest date from Delta Lake stocks_raw table
+    if not delta._table_exists(delta.stocks_raw_path):
+        logger.warning("⚠️ No stock data in Delta Lake yet, cannot determine date range")
         return 0
+
+    stats = delta.get_table_stats()
+    if "stocks_raw" not in stats or "min_date" not in stats["stocks_raw"]:
+        logger.warning("⚠️ No stock data in Delta Lake yet, cannot determine date range")
+        return 0
+
+    earliest_datetime = stats["stocks_raw"]["min_date"]
+    if earliest_datetime is None:
+        logger.warning("⚠️ No stock data in Delta Lake yet, cannot determine date range")
+        return 0
+
+    # Convert datetime to date
+    earliest_date = earliest_datetime.date() if hasattr(earliest_datetime, 'date') else earliest_datetime
 
     logger.info(f"🔄 Syncing ALL splits from {earliest_date} to today (bulk API call)...")
 
@@ -113,13 +123,23 @@ def sync_splits_for_ticker(
     """
     settings = get_settings()
 
-    # Get earliest stock flatfile date
-    stocks_path = settings.flatfiles_path / "stocks"
-    earliest_date = get_earliest_flatfile_date(stocks_path)
-
-    if earliest_date is None:
-        logger.warning("⚠️ No stock flatfiles found, cannot determine date range")
+    # Get earliest date from Delta Lake stocks_raw table
+    if not delta._table_exists(delta.stocks_raw_path):
+        logger.warning("⚠️ No stock data in Delta Lake yet, cannot determine date range")
         return 0
+
+    stats = delta.get_table_stats()
+    if "stocks_raw" not in stats or "min_date" not in stats["stocks_raw"]:
+        logger.warning("⚠️ No stock data in Delta Lake yet, cannot determine date range")
+        return 0
+
+    earliest_datetime = stats["stocks_raw"]["min_date"]
+    if earliest_datetime is None:
+        logger.warning("⚠️ No stock data in Delta Lake yet, cannot determine date range")
+        return 0
+
+    # Convert datetime to date
+    earliest_date = earliest_datetime.date() if hasattr(earliest_datetime, 'date') else earliest_datetime
 
     logger.info(f"🔄 Syncing splits for {ticker}...")
 

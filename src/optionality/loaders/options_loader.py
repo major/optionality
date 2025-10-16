@@ -138,6 +138,7 @@ def load_all_options_files() -> dict:
         task = progress.add_task("Loading options files...", total=len(dates))
 
         for target_date in dates:
+            logger.info(f"  📉 Loading {target_date}...")
             try:
                 result = load_options_file(data_source, target_date)
                 total_rows += result["rows_inserted"]
@@ -232,6 +233,7 @@ def load_incremental_options_files() -> dict:
     file_errors = 0
 
     for target_date in missing_dates:
+        logger.info(f"  📉 Loading {target_date}...")
         try:
             result = load_options_file(data_source, target_date)
             total_rows += result["rows_inserted"]
