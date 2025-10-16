@@ -1,0 +1,122 @@
+name: 🔄 Update Stock & Options Data
+
+on:
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      run_verification:
+        description: "Run verification after update"
+        required: false
+        default: true
+        type: boolean
+
+  # Run hourly to check for new Polygon flatfiles
+  # Files arrive between 8PM ET (day of data) and 11AM ET (next day)
+  schedule:
+    - cron: "54 * * * *"
+
+# Required for AWS OIDC authentication
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  # Delta Lake Storage - S3 configuration
+  STORAGE_BACKEND: s3
+  STORAGE_PATH: s3://major-optionality/delta
+  AWS_REGION: us-east-1
+
+jobs:
+  update:
+    name: 📊 Update Delta Tables in S3
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔐 Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::911986281031:role/github-actions-optionality
+          aws-region: us-east-1
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: 📦 Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: 🔧 Install dependencies
+        run: uv sync
+
+      - name: 🔍 Check if flatfiles are available
+        id: check_files
+        env:
+          POLYGON_FLATFILES_ACCESS_KEY: ${{ secrets.POLYGON_FLATFILES_ACCESS_KEY }}
+          POLYGON_FLATFILES_SECRET_KEY: ${{ secrets.POLYGON_FLATFILES_SECRET_KEY }}
+        run: |
+          echo "🔍 Checking if yesterday's flatfiles have arrived..."
+          uv run optionality check-files
+          echo "files_ready=true" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: ⏳ Skip update - waiting for files
+        if: steps.check_files.outcome == 'failure'
+        run: |
+          echo "⏳ Flatfiles not yet available - skipping update"
+          echo "💡 Files typically arrive between 8PM ET (day of) and 11AM ET (next day)"
+          echo "✅ Will check again next hour"
+          exit 0
+
+      - name: ✅ Verify AWS credentials
+        if: steps.check_files.outcome == 'success'
+        run: |
+          echo "🔍 Verifying AWS credentials..."
+          aws sts get-caller-identity
+          echo "✅ AWS credentials configured successfully!"
+
+          echo "📦 Verifying S3 bucket access..."
+          aws s3 ls s3://major-optionality/ || echo "⚠️ Bucket not accessible or empty"
+
+      - name: 🚀 Run incremental update
+        if: steps.check_files.outcome == 'success'
+        env:
+          POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+          POLYGON_FLATFILES_ACCESS_KEY: ${{ secrets.POLYGON_FLATFILES_ACCESS_KEY }}
+          POLYGON_FLATFILES_SECRET_KEY: ${{ secrets.POLYGON_FLATFILES_SECRET_KEY }}
+        run: |
+          echo "🌟 Starting incremental update..."
+          echo "📍 Delta tables will be stored in: $STORAGE_PATH"
+          uv run optionality update
+
+      - name: 🔍 Run verification
+        if: steps.check_files.outcome == 'success' && inputs.run_verification != false
+        env:
+          POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+        run: |
+          echo "🔍 Running verification spot checks..."
+          uv run optionality verify
+
+      - name: 📊 Show statistics
+        if: steps.check_files.outcome == 'success'
+        run: |
+          echo "📊 Final Delta Lake statistics:"
+          uv run optionality stats
+
+      - name: 💬 Notify on success
+        if: success() && steps.check_files.outcome == 'success'
+        run: |
+          echo "✅ Update completed successfully!"
+          echo "☁️ Delta tables updated in S3: s3://major-optionality/delta"
+
+      - name: ⚠️ Notify on failure
+        if: failure() && steps.check_files.outcome == 'success'
+        run: |
+          echo "❌ Update failed! Check logs above for details."
+          exit 1

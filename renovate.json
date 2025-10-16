@@ -1,0 +1,30 @@
+{
+    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+    "extends": [
+        "config:recommended",
+        ":automergeAll",
+        "config:best-practices"
+    ],
+    "platformAutomerge": true,
+    "git-submodules": {
+        "enabled": true
+    },
+    "packageRules": [
+        {
+            "matchManagers": [
+                "github-actions"
+            ],
+            "automerge": true
+        },
+        {
+            "matchManagers": [
+                "dockerfile",
+                "pep621"
+            ],
+            "matchPackageNames": [
+                "python"
+            ],
+            "enabled": false
+        }
+    ]
+}
