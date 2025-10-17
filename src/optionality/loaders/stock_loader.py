@@ -5,7 +5,6 @@ from datetime import date, datetime
 
 import polars as pl
 import pandas_market_calendars as mcal
-from rich.progress import Progress, BarColumn, TextColumn, TimeRemainingColumn
 
 from optionality.loaders.data_source import DataSource
 from optionality.loaders import create_data_source
@@ -86,41 +85,33 @@ def load_stock_files_sequential(
     errors = 0
     files_processed = 0
 
-    with Progress(
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        TimeRemainingColumn(),
-    ) as progress:
-        task = progress.add_task("Loading raw stock files...", total=len(dates))
+    for idx, target_date in enumerate(dates, 1):
+        try:
+            # Read CSV.GZ file using data source (handles local or S3!)
+            df = data_source.read_csv_gz(target_date)
 
-        for target_date in dates:
-            try:
-                # Read CSV.GZ file using data source (handles local or S3!)
-                df = data_source.read_csv_gz(target_date)
+            if len(df) == 0:
+                logger.warning(f"  ⚠️ {target_date}: Empty file")
+                continue
 
-                if len(df) == 0:
-                    logger.warning(f"  ⚠️ {target_date}: Empty file")
-                    progress.update(task, advance=1)
-                    continue
+            # Convert nanosecond timestamp to datetime (data transformation)
+            df = df.with_columns(
+                (pl.col("window_start") / 1_000_000).alias("window_start")
+            )
 
-                # Convert nanosecond timestamp to datetime (data transformation)
-                df = df.with_columns(
-                    (pl.col("window_start") / 1_000_000).alias("window_start")
-                )
+            # Write raw data immediately
+            delta.write_stocks_raw(df, mode="append")
 
-                # Write raw data immediately
-                delta.write_stocks_raw(df, mode="append")
+            total_raw_rows += len(df)
+            files_processed += 1
 
-                total_raw_rows += len(df)
-                files_processed += 1
-                logger.info(f"  📈 Loaded {target_date}: {len(df):,} rows")
+            # Log progress every 10 files or at the end
+            if idx % 10 == 0 or idx == len(dates):
+                logger.info(f"  📈 Progress: {idx}/{len(dates)} files ({files_processed} loaded, {total_raw_rows:,} rows)")
 
-            except Exception as e:
-                errors += 1
-                logger.error(f"  ❌ {target_date}: {e}")
-
-            progress.update(task, advance=1)
+        except Exception as e:
+            errors += 1
+            logger.error(f"  ❌ {target_date}: {e}")
 
     logger.success(
         f"✅ Loaded {total_raw_rows:,} raw rows from {files_processed} files ({errors} errors)"
@@ -191,32 +182,24 @@ def load_all_stock_files() -> dict:
 
     logger.info(f"📊 Found {len(dates)} dates")
 
-    # Process dates with progress bar
+    # Process dates
     total_raw_rows = 0
     total_adjusted_rows = 0
     errors = 0
 
-    with Progress(
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        TimeRemainingColumn(),
-    ) as progress:
-        task = progress.add_task("Loading stock files...", total=len(dates))
+    for idx, target_date in enumerate(dates, 1):
+        try:
+            raw_count, adjusted_count = load_stock_file(data_source, target_date)
+            total_raw_rows += raw_count
+            total_adjusted_rows += adjusted_count
 
-        for target_date in dates:
-            try:
-                raw_count, adjusted_count = load_stock_file(data_source, target_date)
-                total_raw_rows += raw_count
-                total_adjusted_rows += adjusted_count
+            # Log progress every 10 files or at the end
+            if idx % 10 == 0 or idx == len(dates):
+                logger.info(f"  📈 Progress: {idx}/{len(dates)} files ({total_raw_rows:,} raw rows, {total_adjusted_rows:,} adjusted rows)")
 
-                logger.info(f"  ✅ {target_date}: {raw_count:,} raw rows, {adjusted_count:,} adjusted rows")
-
-            except Exception as e:
-                errors += 1
-                logger.error(f"  ❌ {target_date}: {e}")
-
-            progress.update(task, advance=1)
+        except Exception as e:
+            errors += 1
+            logger.error(f"  ❌ {target_date}: {e}")
 
     logger.success(
         f"✅ Loaded {total_raw_rows:,} raw rows and {total_adjusted_rows:,} adjusted rows "

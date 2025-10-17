@@ -4,7 +4,6 @@ from pathlib import Path
 from datetime import date
 
 import polars as pl
-from rich.progress import Progress, BarColumn, TextColumn, TimeRemainingColumn
 
 from optionality.loaders.data_source import DataSource
 from optionality.loaders import create_data_source
@@ -124,36 +123,26 @@ def load_all_options_files() -> dict:
 
     logger.info(f"📊 Found {len(dates)} dates")
 
-    # Process dates with progress bar
+    # Process dates
     total_rows = 0
     total_parse_errors = 0
     file_errors = 0
 
-    with Progress(
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        TimeRemainingColumn(),
-    ) as progress:
-        task = progress.add_task("Loading options files...", total=len(dates))
+    for idx, target_date in enumerate(dates, 1):
+        try:
+            result = load_options_file(data_source, target_date)
+            total_rows += result["rows_inserted"]
+            total_parse_errors += result["parse_errors"]
 
-        for target_date in dates:
-            logger.info(f"  📉 Loading {target_date}...")
-            try:
-                result = load_options_file(data_source, target_date)
-                total_rows += result["rows_inserted"]
-                total_parse_errors += result["parse_errors"]
-
+            # Log progress every 10 files or at the end
+            if idx % 10 == 0 or idx == len(dates):
                 logger.info(
-                    f"  ✅ {target_date}: {result['rows_inserted']:,} rows "
-                    f"({result['parse_errors']} parse errors)"
+                    f"  📉 Progress: {idx}/{len(dates)} files ({total_rows:,} rows, {total_parse_errors} parse errors)"
                 )
 
-            except Exception as e:
-                file_errors += 1
-                logger.error(f"  ❌ {target_date}: {e}")
-
-            progress.update(task, advance=1)
+        except Exception as e:
+            file_errors += 1
+            logger.error(f"  ❌ {target_date}: {e}")
 
     logger.success(f"✅ Loaded {total_rows:,} options rows from {len(dates)} dates")
 
@@ -232,13 +221,18 @@ def load_incremental_options_files() -> dict:
     total_parse_errors = 0
     file_errors = 0
 
-    for target_date in missing_dates:
-        logger.info(f"  📉 Loading {target_date}...")
+    for idx, target_date in enumerate(missing_dates, 1):
         try:
             result = load_options_file(data_source, target_date)
             total_rows += result["rows_inserted"]
             total_parse_errors += result["parse_errors"]
-            logger.info(f"  ✅ {target_date}: {result['rows_inserted']:,} rows")
+
+            # Log progress every 10 files or at the end
+            if idx % 10 == 0 or idx == len(missing_dates):
+                logger.info(
+                    f"  📉 Progress: {idx}/{len(missing_dates)} files ({total_rows:,} rows, {total_parse_errors} parse errors)"
+                )
+
         except Exception as e:
             file_errors += 1
             logger.error(f"  ❌ {target_date}: {e}")

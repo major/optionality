@@ -59,12 +59,21 @@ def calculate_technical_indicators() -> int:
             pl.col("close").ta.sma(timeperiod=200).over("ticker").alias("sma_200"),
             # Simple Moving Average of volume
             pl.col("volume").cast(pl.Float64).ta.sma(timeperiod=20).over("ticker").alias("volume_sma_20"),
-            # Average True Range (requires high, low, close)
+            # Average True Range
             pl.col("close").ta.atr(
                 high=pl.col("high"),
                 low=pl.col("low"),
                 timeperiod=14
             ).over("ticker").alias("atr"),
+        ])
+        # Shift indicators back 1 day so they don't include current day's data
+        # This matches TradingView's behavior where the SMA for day N uses data from N-20 through N-1
+        .with_columns([
+            pl.col("sma_20").shift(1).over("ticker"),
+            pl.col("sma_50").shift(1).over("ticker"),
+            pl.col("sma_200").shift(1).over("ticker"),
+            pl.col("volume_sma_20").shift(1).over("ticker"),
+            pl.col("atr").shift(1).over("ticker"),
         ])
         # Select only the columns we need for the technical table
         .select([
