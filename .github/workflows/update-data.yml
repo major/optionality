@@ -12,8 +12,8 @@ on:
 
   # Run hourly to check for new Polygon flatfiles
   # Files arrive between 8PM ET (day of data) and 11AM ET (next day)
-  schedule:
-    - cron: "54 * * * *"
+  # schedule:
+  # - cron: "54 * * * *"
 
 # Required for AWS OIDC authentication
 permissions:

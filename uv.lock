@@ -365,19 +365,6 @@ wheels = [
 ]
 
 [[package]]
-name = "llvmlite"
-version = "0.45.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/99/8d/5baf1cef7f9c084fb35a8afbde88074f0d6a727bc63ef764fe0e7543ba40/llvmlite-0.45.1.tar.gz", hash = "sha256:09430bb9d0bb58fc45a45a57c7eae912850bedc095cd0810a57de109c69e1c32", size = 185600, upload-time = "2025-10-01T17:59:52.046Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/1d/e2/c185bb7e88514d5025f93c6c4092f6120c6cea8fe938974ec9860fb03bbb/llvmlite-0.45.1-cp313-cp313-macosx_10_15_x86_64.whl", hash = "sha256:d9ea9e6f17569a4253515cc01dade70aba536476e3d750b2e18d81d7e670eb15", size = 43043524, upload-time = "2025-10-01T18:03:43.249Z" },
-    { url = "https://files.pythonhosted.org/packages/09/b8/b5437b9ecb2064e89ccf67dccae0d02cd38911705112dd0dcbfa9cd9a9de/llvmlite-0.45.1-cp313-cp313-macosx_12_0_arm64.whl", hash = "sha256:c9f3cadee1630ce4ac18ea38adebf2a4f57a89bd2740ce83746876797f6e0bfb", size = 37253121, upload-time = "2025-10-01T18:04:30.557Z" },
-    { url = "https://files.pythonhosted.org/packages/f7/97/ad1a907c0173a90dd4df7228f24a3ec61058bc1a9ff8a0caec20a0cc622e/llvmlite-0.45.1-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:57c48bf2e1083eedbc9406fb83c4e6483017879714916fe8be8a72a9672c995a", size = 56288210, upload-time = "2025-10-01T18:01:40.26Z" },
-    { url = "https://files.pythonhosted.org/packages/32/d8/c99c8ac7a326e9735401ead3116f7685a7ec652691aeb2615aa732b1fc4a/llvmlite-0.45.1-cp313-cp313-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:3aa3dfceda4219ae39cf18806c60eeb518c1680ff834b8b311bd784160b9ce40", size = 55140957, upload-time = "2025-10-01T18:02:46.244Z" },
-    { url = "https://files.pythonhosted.org/packages/09/56/ed35668130e32dbfad2eb37356793b0a95f23494ab5be7d9bf5cb75850ee/llvmlite-0.45.1-cp313-cp313-win_amd64.whl", hash = "sha256:080e6f8d0778a8239cd47686d402cb66eb165e421efa9391366a9b7e5810a38b", size = 38132232, upload-time = "2025-10-01T18:05:14.477Z" },
-]
-
-[[package]]
 name = "loguru"
 version = "0.7.3"
 source = { registry = "https://pypi.org/simple" }
@@ -421,15 +408,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d6/54/cfe61301667036ec958cb99bd3efefba235e65cdeb9c84d24a8293ba1d90/mdurl-0.1.2.tar.gz", hash = "sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba", size = 8729, upload-time = "2022-08-14T12:40:10.846Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8", size = 9979, upload-time = "2022-08-14T12:40:09.779Z" },
-]
-
-[[package]]
-name = "more-itertools"
-version = "10.8.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/ea/5d/38b681d3fce7a266dd9ab73c66959406d565b3e85f21d5e66e1181d93721/more_itertools-10.8.0.tar.gz", hash = "sha256:f638ddf8a1a0d134181275fb5d58b086ead7c6a72429ad725c67503f13ba30bd", size = 137431, upload-time = "2025-09-02T15:23:11.018Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a4/8e/469e5a4a2f5855992e425f3cb33804cc07bf18d48f2db061aec61ce50270/more_itertools-10.8.0-py3-none-any.whl", hash = "sha256:52d4362373dcf7c52546bc4af9a86ee7c4579df9a8dc268be0a2f949d376cc9b", size = 69667, upload-time = "2025-09-02T15:23:09.635Z" },
 ]
 
 [[package]]
@@ -487,23 +465,6 @@ wheels = [
 ]
 
 [[package]]
-name = "numba"
-version = "0.62.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "llvmlite" },
-    { name = "numpy" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/a3/20/33dbdbfe60e5fd8e3dbfde299d106279a33d9f8308346022316781368591/numba-0.62.1.tar.gz", hash = "sha256:7b774242aa890e34c21200a1fc62e5b5757d5286267e71103257f4e2af0d5161", size = 2749817, upload-time = "2025-09-29T10:46:31.551Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/22/76/501ea2c07c089ef1386868f33dff2978f43f51b854e34397b20fc55e0a58/numba-0.62.1-cp313-cp313-macosx_10_15_x86_64.whl", hash = "sha256:b72489ba8411cc9fdcaa2458d8f7677751e94f0109eeb53e5becfdc818c64afb", size = 2685766, upload-time = "2025-09-29T10:43:49.161Z" },
-    { url = "https://files.pythonhosted.org/packages/80/68/444986ed95350c0611d5c7b46828411c222ce41a0c76707c36425d27ce29/numba-0.62.1-cp313-cp313-macosx_12_0_arm64.whl", hash = "sha256:44a1412095534a26fb5da2717bc755b57da5f3053965128fe3dc286652cc6a92", size = 2688741, upload-time = "2025-09-29T10:44:10.07Z" },
-    { url = "https://files.pythonhosted.org/packages/78/7e/bf2e3634993d57f95305c7cee4c9c6cb3c9c78404ee7b49569a0dfecfe33/numba-0.62.1-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:8c9460b9e936c5bd2f0570e20a0a5909ee6e8b694fd958b210e3bde3a6dba2d7", size = 3804576, upload-time = "2025-09-29T10:42:59.53Z" },
-    { url = "https://files.pythonhosted.org/packages/e8/b6/8a1723fff71f63bbb1354bdc60a1513a068acc0f5322f58da6f022d20247/numba-0.62.1-cp313-cp313-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:728f91a874192df22d74e3fd42c12900b7ce7190b1aad3574c6c61b08313e4c5", size = 3503367, upload-time = "2025-09-29T10:43:26.326Z" },
-    { url = "https://files.pythonhosted.org/packages/9c/ec/9d414e7a80d6d1dc4af0e07c6bfe293ce0b04ea4d0ed6c45dad9bd6e72eb/numba-0.62.1-cp313-cp313-win_amd64.whl", hash = "sha256:bbf3f88b461514287df66bc8d0307e949b09f2b6f67da92265094e8fa1282dd8", size = 2745529, upload-time = "2025-09-29T10:44:31.738Z" },
-]
-
-[[package]]
 name = "numpy"
 version = "2.3.4"
 source = { registry = "https://pypi.org/simple" }
@@ -545,7 +506,7 @@ dependencies = [
     { name = "loguru" },
     { name = "pandas-market-calendars" },
     { name = "polars" },
-    { name = "polars-ta" },
+    { name = "polars-talib" },
     { name = "polygon-api-client" },
     { name = "pyarrow" },
     { name = "pydantic-settings" },
@@ -576,7 +537,7 @@ requires-dist = [
     { name = "loguru", specifier = ">=0.7.0" },
     { name = "pandas-market-calendars", specifier = ">=5.1.1" },
     { name = "polars", specifier = ">=1.34.0" },
-    { name = "polars-ta", specifier = ">=0.5.14" },
+    { name = "polars-talib", specifier = ">=0.1.5" },
     { name = "polygon-api-client", specifier = ">=1.14.0" },
     { name = "pyarrow", specifier = ">=18.0.0" },
     { name = "pydantic-settings", specifier = ">=2.11.0" },
@@ -671,25 +632,6 @@ wheels = [
 ]
 
 [[package]]
-name = "polars-ols"
-version = "0.3.5"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "polars" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/2b/da/56fdbd7c00d0e9bf82fe88a55d4cd1132c834619456a375b1821da4bb865/polars_ols-0.3.5.tar.gz", hash = "sha256:b507aa33c920573f3e3a152b6cb4e4429b3892db5e393fd2cb5cd7cfb53d7e77", size = 84767, upload-time = "2024-08-25T16:22:33.613Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/30/6a/c1a955f68f04ef18a6c1b8e185b23f49a34b86e72623f809166f2fbaa3c9/polars_ols-0.3.5-cp38-abi3-macosx_10_12_x86_64.whl", hash = "sha256:79c71a38cc86de74a3312dec80f578a0c5dee0eec66064bde7d52b98c8b0cbe9", size = 11294762, upload-time = "2024-08-25T16:22:11.703Z" },
-    { url = "https://files.pythonhosted.org/packages/d0/61/8fe5d3bcc15a671336eb6cfe3b34c1ddcbd969f3552225d815dc729e22c5/polars_ols-0.3.5-cp38-abi3-macosx_11_0_arm64.whl", hash = "sha256:fe4b97b168c5404d796463e97db851a94607c79a909fdaeedc4629b56649a2fb", size = 10243546, upload-time = "2024-08-25T16:22:14.671Z" },
-    { url = "https://files.pythonhosted.org/packages/20/bd/711cf2815e79d83e9057ffa893036d78210f3411bf638a78496635da49c9/polars_ols-0.3.5-cp38-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:fe5b08142fdd85d4beaecf9ab8bdf16b93db9919b2706755ae90e362a985f01d", size = 11920671, upload-time = "2024-08-25T16:22:17.541Z" },
-    { url = "https://files.pythonhosted.org/packages/4d/a2/33b0cdbec45b859cf93657c4978ab2e4747235e5ab10138c16ce2622ada8/polars_ols-0.3.5-cp38-abi3-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:fa2880802d42076a935b5c1bd9e114e8f3bb4126290330b63aaf32eda6381a51", size = 12108217, upload-time = "2024-08-25T16:22:20.057Z" },
-    { url = "https://files.pythonhosted.org/packages/b1/bf/95a3841b43ede52a01ec02ad59fcaac92804ab208637f2c25694833a5399/polars_ols-0.3.5-cp38-abi3-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:5fe50e4032e7430e5ed154f426f4c83973a9e30120211afd122c597bea19828f", size = 13592335, upload-time = "2024-08-25T16:22:23.11Z" },
-    { url = "https://files.pythonhosted.org/packages/0e/40/c760dc5eaa03bf6ff3e9d09c723b7d7b02521a5a45324910b74d6aa19480/polars_ols-0.3.5-cp38-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:7b8c0f03c6bf6dd9e0384f4d95183989724fd8e5703d20daade1754631f5b7d9", size = 15267885, upload-time = "2024-08-25T16:22:26.114Z" },
-    { url = "https://files.pythonhosted.org/packages/13/1d/b3f7c57ca9ab7bf878b766467e68f4adcc5e41a94eee68c8d0c7bcd948d2/polars_ols-0.3.5-cp38-abi3-win32.whl", hash = "sha256:8e33fc7d6cb62cb7930b50a5dd428ce9dfd5bb3587463672269ed65776aa8081", size = 8963620, upload-time = "2024-08-25T16:22:28.697Z" },
-    { url = "https://files.pythonhosted.org/packages/ea/5f/5a7b73ab8bead1b453a8b9fcca1bf024dd7b057177c19bbc523537c4bfcd/polars_ols-0.3.5-cp38-abi3-win_amd64.whl", hash = "sha256:075e27381781895a9ada73296777304fcd2752797c4f7e17f3c30b57ae4a2120", size = 10338290, upload-time = "2024-08-25T16:22:31.476Z" },
-]
-
-[[package]]
 name = "polars-runtime-32"
 version = "1.34.0"
 source = { registry = "https://pypi.org/simple" }
@@ -704,20 +646,19 @@ wheels = [
 ]
 
 [[package]]
-name = "polars-ta"
-version = "0.5.14"
+name = "polars-talib"
+version = "0.1.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "more-itertools" },
-    { name = "numba" },
-    { name = "numpy" },
-    { name = "pandas" },
     { name = "polars" },
-    { name = "polars-ols" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/aa/78/ee97d326df27722810c646f9eed82ce6d86fb785ac7397c8708e4074b537/polars_ta-0.5.14.tar.gz", hash = "sha256:4a20dc795f980657d1e5ec6f8d3b3e920f9380fdb86f35e13db80e6fa403ef17", size = 67054, upload-time = "2025-10-09T05:23:28.459Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/00/7c/8f6e7e007fd19be0b8ec34c4b65a8d954fbdc45d54c41c608a5c3104c816/polars_ta-0.5.14-py3-none-any.whl", hash = "sha256:e73d048f99641ee9248aba2b8deb296943cfdb09011c6d4f7ef3721eefbbd164", size = 88420, upload-time = "2025-10-09T05:23:26.576Z" },
+    { url = "https://files.pythonhosted.org/packages/c9/5a/7fb40579f8f37e86f4f90eb319a32760c0e4c0d919acb419916493533a06/polars_talib-0.1.5-cp37-abi3-macosx_10_12_x86_64.whl", hash = "sha256:1af11b5dbc6b50d69af4ec809cb2ca12378fe8d7b91d0871f59de5d23948634f", size = 3727507, upload-time = "2025-01-24T12:02:37.683Z" },
+    { url = "https://files.pythonhosted.org/packages/1d/a9/08c203d8e256d3490f960e390ec4046d7079df027eef13bae7c14976a0fd/polars_talib-0.1.5-cp37-abi3-macosx_11_0_arm64.whl", hash = "sha256:990a488c17e96d8c816e01cef0d8eed925291a9da607081c38fc767ef665af42", size = 3551492, upload-time = "2025-01-24T12:02:42.662Z" },
+    { url = "https://files.pythonhosted.org/packages/39/89/db0dcfd565b9089c6acf15f976a81c6010a5c8c3b4c5f713cc80846a4430/polars_talib-0.1.5-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:d794e0e4a4f0c28870adc8f0b7b9a89761d232db8c3534d7f8ef382cfcc6fab0", size = 4486597, upload-time = "2025-01-24T12:02:44.75Z" },
+    { url = "https://files.pythonhosted.org/packages/0d/1b/442bcdef40486474215e49fdb5eac58c474e32e465390ef08521568f9bf6/polars_talib-0.1.5-cp37-abi3-manylinux_2_38_aarch64.whl", hash = "sha256:da82f845f5f30de0108d1490eaf91c7a7e55d603f75cebd0112f56cb0d82b4fe", size = 4074481, upload-time = "2025-01-24T12:02:46.729Z" },
+    { url = "https://files.pythonhosted.org/packages/06/bd/2f53bb4cf3d2037ee43a7b85c4e984caeebb69ca17d76146832e04d69230/polars_talib-0.1.5-cp37-abi3-win32.whl", hash = "sha256:61638172eefa7e8cf531ce88ddbf11ccf2fdea4ef06246b89126e026c055dcc8", size = 2944592, upload-time = "2025-01-24T12:02:49.224Z" },
+    { url = "https://files.pythonhosted.org/packages/51/b8/8084249359790c98f463569e98331fd5686d82fce7e50790333e49bda609/polars_talib-0.1.5-cp37-abi3-win_amd64.whl", hash = "sha256:7fb2d64d3b92eb2625ac667e5395b1baf704ed6ee8a1e250eaacbde47d8d10d0", size = 3470437, upload-time = "2025-01-24T12:02:50.983Z" },
 ]
 
 [[package]]

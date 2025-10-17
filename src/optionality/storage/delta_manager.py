@@ -35,6 +35,16 @@ STOCKS_ADJUSTED_SCHEMA = {
     "transactions": pl.UInt32,
 }
 
+STOCKS_TECHNICAL_SCHEMA = {
+    "ticker": pl.String,
+    "window_start": pl.Datetime("ms"),
+    "sma_20": pl.Float32,  # 20-day Simple Moving Average of close
+    "sma_50": pl.Float32,  # 50-day Simple Moving Average of close
+    "sma_200": pl.Float32,  # 200-day Simple Moving Average of close
+    "volume_sma_20": pl.Float64,  # 20-day Simple Moving Average of volume
+    "atr": pl.Float32,  # Average True Range (14-day)
+}
+
 SPLITS_SCHEMA = {
     "id": pl.String,
     "ticker": pl.String,
@@ -117,6 +127,7 @@ class DeltaLakeManager:
             # S3 paths - use forward slashes
             self.stocks_raw_path = f"{self.base_path}/stocks_raw"
             self.stocks_adjusted_path = f"{self.base_path}/stocks_adjusted"
+            self.stocks_technical_path = f"{self.base_path}/stocks_technical"
             self.splits_path = f"{self.base_path}/splits"
             self.options_path = f"{self.base_path}/options"
             self.tickers_path = f"{self.base_path}/tickers"
@@ -125,6 +136,7 @@ class DeltaLakeManager:
             base = Path(self.base_path)
             self.stocks_raw_path = str(base / "stocks_raw")
             self.stocks_adjusted_path = str(base / "stocks_adjusted")
+            self.stocks_technical_path = str(base / "stocks_technical")
             self.splits_path = str(base / "splits")
             self.options_path = str(base / "options")
             self.tickers_path = str(base / "tickers")
@@ -189,6 +201,7 @@ class DeltaLakeManager:
         tables = [
             (self.stocks_raw_path, STOCKS_RAW_SCHEMA, ["ticker"], "stocks_raw"),
             (self.stocks_adjusted_path, STOCKS_ADJUSTED_SCHEMA, ["ticker"], "stocks_adjusted"),
+            (self.stocks_technical_path, STOCKS_TECHNICAL_SCHEMA, ["ticker"], "stocks_technical"),
             (self.splits_path, SPLITS_SCHEMA, ["ticker"], "splits"),
             (self.options_path, OPTIONS_SCHEMA, ["underlying_symbol"], "options"),
             (self.tickers_path, TICKERS_SCHEMA, ["ticker"], "tickers"),
@@ -216,6 +229,7 @@ class DeltaLakeManager:
         tables = [
             (self.stocks_raw_path, "stocks_raw"),
             (self.stocks_adjusted_path, "stocks_adjusted"),
+            (self.stocks_technical_path, "stocks_technical"),
             (self.splits_path, "splits"),
             (self.options_path, "options"),
             (self.tickers_path, "tickers"),
@@ -321,6 +335,38 @@ class DeltaLakeManager:
             return pl.LazyFrame(schema=STOCKS_ADJUSTED_SCHEMA)
 
         lf = pl.scan_delta(self.stocks_adjusted_path, storage_options=self.storage_options)
+
+        if ticker:
+            lf = lf.filter(pl.col("ticker") == ticker)
+        if start_date:
+            lf = lf.filter(pl.col("window_start") >= start_date)
+        if end_date:
+            lf = lf.filter(pl.col("window_start") <= end_date)
+
+        return lf
+
+    def scan_stocks_technical(
+        self,
+        ticker: str | None = None,
+        start_date: date | datetime | None = None,
+        end_date: date | datetime | None = None,
+    ) -> pl.LazyFrame:
+        """
+        Lazy scan of technical indicators with optional filters.
+
+        Args:
+            ticker: Filter by ticker (enables partition pruning!)
+            start_date: Filter by start date
+            end_date: Filter by end date
+
+        Returns:
+            LazyFrame with filter pushdown enabled (🚀 optimized for S3!)
+        """
+        if not self._table_exists(self.stocks_technical_path):
+            logger.warning(f"⚠️ Table does not exist: {self.stocks_technical_path}")
+            return pl.LazyFrame(schema=STOCKS_TECHNICAL_SCHEMA)
+
+        lf = pl.scan_delta(self.stocks_technical_path, storage_options=self.storage_options)
 
         if ticker:
             lf = lf.filter(pl.col("ticker") == ticker)
@@ -473,6 +519,28 @@ class DeltaLakeManager:
 
         logger.info(f"✅ Wrote {len(df):,} rows to stocks_adjusted")
 
+    def write_stocks_technical(
+        self,
+        df: pl.DataFrame,
+        mode: str = "overwrite",
+    ) -> None:
+        """
+        Write technical indicators to Delta table.
+
+        Args:
+            df: DataFrame with technical indicators
+            mode: Write mode ("append", "overwrite", "merge")
+        """
+        # Cast to schema and sort by ticker, then date (for time-series analysis)
+        df = (
+            df.select([pl.col(col).cast(dtype) for col, dtype in STOCKS_TECHNICAL_SCHEMA.items()])
+            .sort("ticker", "window_start")
+        )
+
+        self._write_with_compression(self.stocks_technical_path, df, mode, ["ticker"])
+
+        logger.info(f"✅ Wrote {len(df):,} rows to stocks_technical")
+
     def write_splits(
         self,
         df: pl.DataFrame,
@@ -572,6 +640,7 @@ class DeltaLakeManager:
         table_configs = [
             ("stocks_raw", self.stocks_raw_path, "window_start"),
             ("stocks_adjusted", self.stocks_adjusted_path, "window_start"),
+            ("stocks_technical", self.stocks_technical_path, "window_start"),
             ("splits", self.splits_path, "execution_date"),
             ("options", self.options_path, "window_start"),
             ("tickers", self.tickers_path, None),  # No date column
